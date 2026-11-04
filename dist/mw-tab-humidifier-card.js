@@ -17,7 +17,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.8.0";
+  const VERSION = "0.8.1";
   /* ------------------------------------------------------------ utilidades */
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
@@ -465,7 +465,7 @@
   };
 
   const buildAdminTabs = (hass, cfg, meta) => {
-    const isAdmin = Boolean(hass && hass.user && hass.user.is_admin);
+    const isAdmin = Boolean((hass && hass.user && hass.user.is_admin) || cfg.is_admin);
     if (!isAdmin) return [];
 
     const sockEnt = socketEntity(hass, cfg);
@@ -861,7 +861,15 @@ th, td {
     };
     const override = { ...(cfg.yaml_override || {}) };
     if (isSocketOff) delete override.tabs;
-    return deepMerge(root, override);
+    const finalCard = deepMerge(root, override);
+    if (adminTabs.length && Array.isArray(finalCard.tabs)) {
+      for (const at of adminTabs) {
+        if (!finalCard.tabs.some((t) => t.label === at.label)) {
+          finalCard.tabs.push(at);
+        }
+      }
+    }
+    return finalCard;
   };
 
   /* ------------------------------------------------------------------ CARD */
@@ -883,6 +891,10 @@ th, td {
       this._hass = hass;
 
       if (!hass || !this._config) return;
+
+      if (hass.user && typeof hass.user.is_admin === "boolean") {
+        this._isAdmin = hass.user.is_admin;
+      }
 
       const sockEnt = socketEntity(hass, this._config);
       const sockSt = (sockEnt && hass.states && hass.states[sockEnt]) ? hass.states[sockEnt].state : null;
@@ -1005,7 +1017,8 @@ th, td {
         return;
       }
 
-      const cfg = buildConfig(this._hass, this._config);
+      const effectiveCfg = { ...this._config, ...(this._isAdmin !== undefined ? { is_admin: this._isAdmin } : {}) };
+      const cfg = buildConfig(this._hass, effectiveCfg);
       const s = sig(cfg);
       if (this._child && s === this._built) {
         this._child.hass = this._hass;
